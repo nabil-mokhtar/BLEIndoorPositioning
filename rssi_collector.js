@@ -15,17 +15,15 @@ noble.on('stateChange', function(state) {
 beacons=[];
 beacongroup=[];
 
-// // for dummy distance 
-// noble.on('discover', (peripheral)=> { 
-
+// // for dummy distance
+// noble.on('discover', (peripheral)=> {
 //   var reabeated =false;
-
 //   console.log('peripheral discovered (' + peripheral.id +
 //   ' with address <' + peripheral.address +  ', ' + peripheral.addresstype + '>,' +
 //   ' connectable ' + peripheral.connectable + ',' +
 //   ' rssi ' + peripheral.rssi + ':');
 
-  
+
 //   beacons.forEach(beacon=>{
 //     if(beacon.uuid==peripher.uuid){
 //       reabeated=true;
@@ -34,17 +32,14 @@ beacongroup=[];
 //  if(!reabeated){
 //   beacons.push({uuid:peripheral.uuid,rssi: peripheral.rssi});
 //  }
-  
+
 //  console.log(beacons);
 //  if (beacons.length>=3){
 //    emmitter.emit('beaconsfound',beacons);
 //    beacons=[];
 //  }
- 
 // });
-
-
-//to group beacons which will be filtered later 
+//to group beacons which will be filtered later
 
 noble.on('discover',(peripheral)=>{
 
@@ -57,7 +52,7 @@ noble.on('discover',(peripheral)=>{
     if (beacon.uuid==peripheral.uuid){
       beacon.rssi.push(peripheral.rssi);
       found=true;
-      break;
+
     }
    })
 
@@ -78,50 +73,99 @@ noble.on('discover',(peripheral)=>{
    console.log('#######################################');
    console.log(beacongroup);
    beacongroup=[];
-   emmitter.emit('groupcompleted');
+   emmitter.emit('groupcompleted',beacongroup);
    console.log('#######################################');}
 
 })
 
 
-
-
-// HISTOGRAM BUILDING STEP
+// constructing histogram
 emmitter.on('groupcompleted',(group)=>{
 
-  var histvoting=5;
+  var histogram =[];
+  // var histogram = new Array(group.length);
 
-  var histogram = new Array(group.length);
-  for (var i = 0; i < histogram.length; i++) {
-  x[i] = new Array(10);
-  }
-  var i=0;
+  // to initialize histogram in form of [{uuid:value,hist:[]}]
+  beacon.forEach(beacon=>{
+  histogram.push({uuid:beacon.uuid,hist:[]})
+  })
+
+  // to initialize histogram list in form of [{uuid:value,hist:[{index:0-9,sum:0,vote:0},..]},,,,...]
+  histogram.forEach(beaconshist=>{
+  for (var i = 0; i < 10; i++) {
+  beaconshist.hist.push({index:i,sum:0,vote:0});
+  }})
+
+
 
   group.forEach(beacon=>{
 
   var  min = Math.min.apply(null, beacon.rssi),
   max = Math.max.apply(null, beacon.rssi);
- 
-    // to apply 10 index based histogram
-  beacon.rssi.forEach(rssi=>{
-    j=Math.floor(10*((max-rssi)/(max-min)));
-    histogram[i][j]+=1;
-  
-  })
-i++; })
 
-for (var i=0;i<groups.length;i++){
-histogram[i]
+// investigate using every() to break when after beacon is found
+  histogram.forEach(beaconshist=>{
+  if(beacon.uuid==beaconshist.uuid){
+
+    beacon.rssi.forEach(rssi=>{
+
+      j=Math.floor(10*((max-rssi)/(max-min)));
+      beaconshist.hist[j].vote+=1;
+      beaconshist.hist[j].sum+=beacon.rssi;
+
+
+    })
+  }
+  })
+ })
+
+
+  console.log(histogram);
+  emmitter.emit('histogramCompleted',histogram);
+
+})
+
+
+ // get values to use in distance calculations form avreging histogram most voted values
+emmitter.on('histogramCompleted',(histogram)=>{
+
+
+// [{uuid:----,value:-----}]
+filteredrssi=[];
+
+histogram.forEach(beacon=>{
+  var sum=0,count;
+  values=[];
+// [{value:---,index:-----}]
+
+beacon.hist.forEach(index=>{
+
+values.push({value:index.vote,index:index.index});
+
+})
+values.sort(key=operator.itemgetter('value'));
+// i starts from 5 => we need the 5 highest votes
+for(var i=5;i<values.length;i++){
+  beacon.hist.forEach(index=>{
+if(index.index==values[i].index){
+  sum+=index.sum;
+  count=index.vote;
+
+}
+  })
 }
 
+filteredrssi.push({uuid:beacon.uuid,average:sum/count});
+
+})
+
+emmitter.emit('filteredrssi',filteredrssi);
 
 })
 
 
 
-
-
-emmitter.on('beaconsfound',(beacons)=>{
+emmitter.on('filteredrssi',(beacons)=>{
 
   var active_ble=[beacons[0].rssi,beacons[1].rssi,beacons[2].rssi].sort();
 
@@ -135,7 +179,7 @@ emmitter.on('beaconsfound',(beacons)=>{
   });
 
   emmitter.emit('rssiready',active_ble);
-})  
+})
 
 
 
@@ -170,12 +214,3 @@ emmitter.on('distanceready',(distance)=>{
   console.log('third distance = '+distance[2]);
 
 })
-
-
-
-
-
-
-
-
-
